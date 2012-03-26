@@ -173,10 +173,8 @@ static int index_path(git_buf *path, git_indexer *idx)
 	return git_buf_lasterror(path);
 }
 
-int git_indexer_iterate(git_indexer *idx, void (*func)(git_oid *oid, void *data, size_t len, git_otype type))
+int git_indexer_iterate(git_indexer *idx, git_indexer_stats *stats, void (*func)(git_oid *oid, void *data, size_t len, git_otype type))
 {
-	git_indexer_stats _stats;
-	git_indexer_stats *stats = &_stats;
 	git_mwindow_file *mwf;
 	off_t off = sizeof(struct git_pack_header);
 	int error;

@@ -44,7 +44,7 @@ GIT_EXTERN(int) git_indexer_new(git_indexer **out, const char *packname);
  */
 GIT_EXTERN(int) git_indexer_run(git_indexer *idx, git_indexer_stats *stats);
 
-GIT_EXTERN(int) git_indexer_iterate(git_indexer *idx, void (*func)(git_oid *oid, void *data, size_t len, git_otype type));
+GIT_EXTERN(int) git_indexer_iterate(git_indexer *idx, git_indexer_stats *stats, void (*func)(git_oid *oid, void *data, size_t len, git_otype type));
 
 /**
  * Write the index file to disk.
