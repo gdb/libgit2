@@ -173,6 +173,17 @@ static int index_path(git_buf *path, git_indexer *idx)
 	return git_buf_lasterror(path);
 }
 
+void git_indexer_iterate(git_indexer *idx, void (*func)(git_oid *oid))
+{
+	unsigned int i;
+	struct entry *entry;
+
+	/* Write out the offsets */
+	git_vector_foreach(&idx->objects, i, entry) {
+		func(&entry->oid);
+	}
+}
+
 int git_indexer_write(git_indexer *idx)
 {
 	git_mwindow *w = NULL;
