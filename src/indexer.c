@@ -173,6 +173,7 @@ static int index_path(git_buf *path, git_indexer *idx)
 	return git_buf_lasterror(path);
 }
 
+/* There may be a memory leak here. Something to watch out for. */
 int git_indexer_iterate(git_indexer *idx, git_indexer_stats *stats, int (*func)(git_oid *oid, void *data, size_t len, git_otype type))
 {
 	off_t off = sizeof(struct git_pack_header);
