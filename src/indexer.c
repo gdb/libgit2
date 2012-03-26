@@ -173,16 +173,118 @@ static int index_path(git_buf *path, git_indexer *idx)
 	return git_buf_lasterror(path);
 }
 
-void git_indexer_iterate(git_indexer *idx, void (*func)(git_oid *oid))
+int git_indexer_iterate(git_indexer *idx, void (*func)(git_oid *oid))
 {
-	unsigned int i;
+	git_indexer_stats _stats;
+	git_indexer_stats *stats = &_stats;
+	git_mwindow_file *mwf;
+	off_t off = sizeof(struct git_pack_header);
+	int error;
 	struct entry *entry;
+	unsigned int left, processed;
 
-	/* Write out the offsets */
-	git_vector_foreach(&idx->objects, i, entry) {
+	assert(idx && stats);
+
+	mwf = &idx->pack->mwf;
+	error = git_mwindow_file_register(mwf);
+	if (error < GIT_SUCCESS)
+		return git__rethrow(error, "Failed to register mwindow file");
+
+	stats->total = idx->nr_objects;
+	stats->processed = processed = 0;
+
+	while (processed < idx->nr_objects) {
+		git_rawobj obj;
+		git_oid oid;
+		struct git_pack_entry *pentry;
+		git_mwindow *w = NULL;
+		int i;
+		off_t entry_start = off;
+		void *packed;
+		size_t entry_size;
+
+		entry = git__malloc(sizeof(struct entry));
+		memset(entry, 0x0, sizeof(struct entry));
+
+		if (off > UINT31_MAX) {
+			entry->offset = UINT32_MAX;
+			entry->offset_long = off;
+		} else {
+			entry->offset = off;
+		}
+
+		error = git_packfile_unpack(&obj, idx->pack, &off);
+		if (error < GIT_SUCCESS) {
+			error = git__rethrow(error, "Failed to unpack object");
+			goto cleanup;
+		}
+
+		/* FIXME: Parse the object instead of hashing it */
+		error = git_odb__hash_obj(&oid, &obj);
+		if (error < GIT_SUCCESS) {
+			error = git__rethrow(error, "Failed to hash object");
+			goto cleanup;
+		}
+
+		pentry = git__malloc(sizeof(struct git_pack_entry));
+		if (pentry == NULL) {
+			error = GIT_ENOMEM;
+			goto cleanup;
+		}
+		git_oid_cpy(&pentry->sha1, &oid);
+		pentry->offset = entry_start;
+		error = git_vector_insert(&idx->pack->cache, pentry);
+		if (error < GIT_SUCCESS)
+			goto cleanup;
+
+		git_oid_cpy(&entry->oid, &oid);
+		entry->crc = crc32(0L, Z_NULL, 0);
+
+		entry_size = off - entry_start;
+		packed = git_mwindow_open(mwf, &w, entry_start, entry_size, &left);
+		if (packed == NULL) {
+			error = git__rethrow(error, "Failed to open window to read packed data");
+			goto cleanup;
+		}
+		entry->crc = htonl(crc32(entry->crc, packed, entry_size));
+		git_mwindow_close(&w);
+
+		/* Add the object to the list */
+		error = git_vector_insert(&idx->objects, entry);
+
+		printf("About to run func\n");
 		func(&entry->oid);
+		printf("Just ran func\n"); 
+
+		if (error < GIT_SUCCESS) {
+			error = git__rethrow(error, "Failed to add entry to list");
+			goto cleanup;
+		}
+
+		for (i = oid.id[0]; i < 256; ++i) {
+			idx->fanout[i]++;
+		}
+
+		git__free(obj.data);
+
+		stats->processed = ++processed;
 	}
+
+cleanup:
+	git_mwindow_free_all(mwf);
+
+	return error;
+
 }
+
+/* 	unsigned int i; */
+/* 	struct entry *entry; */
+
+/* 	/\* Write out the offsets *\/ */
+/* 	git_vector_foreach(&idx->objects, i, entry) { */
+/* 		func(&entry->oid); */
+/* 	} */
+/* } */
 
 int git_indexer_write(git_indexer *idx)
 {
