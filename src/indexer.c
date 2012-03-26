@@ -173,7 +173,7 @@ static int index_path(git_buf *path, git_indexer *idx)
 	return git_buf_lasterror(path);
 }
 
-int git_indexer_iterate(git_indexer *idx, void (*func)(git_oid *oid))
+int git_indexer_iterate(git_indexer *idx, void (*func)(git_otype type, git_oid *oid))
 {
 	git_indexer_stats _stats;
 	git_indexer_stats *stats = &_stats;
@@ -253,7 +253,7 @@ int git_indexer_iterate(git_indexer *idx, void (*func)(git_oid *oid))
 		error = git_vector_insert(&idx->objects, entry);
 
 		printf("About to run func\n");
-		func(&entry->oid);
+		func(obj.type, &oid);
 		printf("Just ran func\n"); 
 
 		if (error < GIT_SUCCESS) {
