@@ -173,7 +173,7 @@ static int index_path(git_buf *path, git_indexer *idx)
 	return git_buf_lasterror(path);
 }
 
-int git_indexer_iterate(git_indexer *idx, void (*func)(git_otype type, git_oid *oid))
+int git_indexer_iterate(git_indexer *idx, void (*func)(git_oid *oid, void *data, size_t len, git_otype type))
 {
 	git_indexer_stats _stats;
 	git_indexer_stats *stats = &_stats;
@@ -252,9 +252,7 @@ int git_indexer_iterate(git_indexer *idx, void (*func)(git_otype type, git_oid *
 		/* Add the object to the list */
 		error = git_vector_insert(&idx->objects, entry);
 
-		printf("About to run func\n");
-		func(obj.type, &oid);
-		printf("Just ran func\n"); 
+		func(&oid, obj.data, obj.len, obj.type);
 
 		if (error < GIT_SUCCESS) {
 			error = git__rethrow(error, "Failed to add entry to list");
