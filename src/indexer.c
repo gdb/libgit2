@@ -173,12 +173,24 @@ static int index_path(git_buf *path, git_indexer *idx)
 	return git_buf_lasterror(path);
 }
 
-/* There may be a memory leak here. Something to watch out for. */
-int git_indexer_iterate(git_indexer *idx, git_indexer_stats *stats, int (*func)(git_oid *oid, void *data, size_t len, git_otype type))
+/* There may be a memory leak here. Something to watch out for. Also,
+ * there is totally a layering violation here. Caller's responsibility
+ * to free the git_objects they receive. */
+int git_indexer_iterate(
+	git_indexer *idx,
+	git_indexer_stats *stats,
+	git_repository *repo,
+	int (*func)(git_repository *repo, void *data, git_object *object),
+	void *data
+	)
 {
 	off_t off = sizeof(struct git_pack_header);
 	int error;
 	unsigned int processed;
+
+	git_rawobj *obj;
+	git_odb_object *parsed_odb_object;
+	git_object *parsed_object;
 
 	assert(idx && stats);
 
@@ -186,38 +198,61 @@ int git_indexer_iterate(git_indexer *idx, git_indexer_stats *stats, int (*func)(
 	stats->processed = processed = 0;
 
 	while (processed < idx->nr_objects) {
-		git_rawobj obj;
 		git_oid oid;
-		int i;
 
-		/* TODO: it'd be nice to just use the index and not
-		   inflate the contents. I'm not sure that you can
-		   actually get the object type without at least
-		   resolving deltas though. */
-		error = git_packfile_unpack(&obj, idx->pack, &off);
+		obj = git__malloc(sizeof(git_rawobj));
+		if (obj == NULL) {
+			error = git__rethrow(GIT_ENOMEM, "Could not allocate raw gitobj");
+			goto finish;
+		}
+
+		error = git_packfile_unpack(obj, idx->pack, &off);
 		if (error < GIT_SUCCESS) {
 			error = git__rethrow(error, "Failed to unpack object");
-			goto cleanup;
+			goto finish;
 		}
 
 		/* FIXME: Parse the object instead of hashing it */
-		error = git_odb__hash_obj(&oid, &obj);
+		error = git_odb__hash_obj(&oid, obj);
 		if (error < GIT_SUCCESS) {
-		  error = git__rethrow(error, "Failed to hash object");
-		  goto cleanup;
+			error = git__rethrow(error, "Failed to hash object");
+			goto finish;
 		}
 
-		error = func(&oid, obj.data, obj.len, obj.type);
-		git__free(obj.data);
+		error = git_odb__create_odb_object(&parsed_odb_object, &oid, obj);
+		if (error < GIT_SUCCESS) {
+			error = git__rethrow(error, "Failed to create ODB object");
+			goto free_data;
+		}
+
+		error = git_object__create_git_object(&parsed_object, repo, &oid, parsed_odb_object);
+		if (error < GIT_SUCCESS) {
+			error = git__rethrow(error, "Failed to create git object");
+			goto free_odb_object;
+		}
+
+		error = func(repo, data, parsed_object);
 		if (error < GIT_SUCCESS) {
 			error = git__rethrow(error, "Iteration aborted");
-			goto cleanup;
+			goto free_parsed_object;
 		}
 
 		stats->processed = ++processed;
 	}
 
-cleanup:
+finish:
+	return error;
+
+free_parsed_object:
+	git_object_free(parsed_object);
+	return error;
+
+free_odb_object:
+	git_odb_object_free(parsed_odb_object);
+	return error;
+
+free_data:
+	git__free(obj->data);
 	return error;
 }
 

@@ -170,4 +170,10 @@ GIT_EXTERN(size_t) git_object__size(git_otype type);
 /** @} */
 GIT_END_DECL
 
+int git_object__create_git_object(
+	git_object **object_out,
+	git_repository *repo,
+	const git_oid *id,
+	git_odb_object *odb_obj);
+
 #endif

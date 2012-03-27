@@ -39,5 +39,10 @@ struct git_odb {
 };
 
 int git_odb__hash_obj(git_oid *id, git_rawobj *obj);
+int git_odb__create_odb_object(
+	git_odb_object **odb_object_out,
+	git_oid *oid,
+	git_rawobj *contents
+	);
 
 #endif

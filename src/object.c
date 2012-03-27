@@ -77,6 +77,64 @@ static int create_object(git_object **object_out, git_otype type)
 	return GIT_SUCCESS;
 }
 
+/* Stole a lot of code from git_object_lookup_prefix */
+int git_object__create_git_object(
+	git_object **object_out,
+	git_repository *repo,
+	const git_oid *id,
+	git_odb_object *odb_obj)
+{
+	git_object *object = NULL;
+	git_otype type;
+	int error = GIT_SUCCESS;
+
+	assert(repo && object_out && id && odb_obj);
+
+	object = git_cache_get(&repo->objects, id);
+	if (object != NULL) {
+		*object_out = object;
+		return GIT_SUCCESS;
+	}
+
+	type = odb_obj->raw.type;
+
+	if ((error = create_object(&object, type)) < GIT_SUCCESS)
+		return git__rethrow(error, "Failed to initialize object");
+
+	/* Initialize parent object */
+	git_oid_cpy(&object->cached.oid, &odb_obj->cached.oid);
+	object->repo = repo;
+
+	switch (type) {
+	case GIT_OBJ_COMMIT:
+		error = git_commit__parse((git_commit *)object, odb_obj);
+		break;
+
+	case GIT_OBJ_TREE:
+		error = git_tree__parse((git_tree *)object, odb_obj);
+		break;
+
+	case GIT_OBJ_TAG:
+		error = git_tag__parse((git_tag *)object, odb_obj);
+		break;
+
+	case GIT_OBJ_BLOB:
+		error = git_blob__parse((git_blob *)object, odb_obj);
+		break;
+
+	default:
+		break;
+	}
+
+	if (error < GIT_SUCCESS) {
+		git_object__free(object);
+		return git__rethrow(error, "Failed to parse object");
+	}
+
+	*object_out = git_cache_try_store(&repo->objects, object);
+	return GIT_SUCCESS;
+}
+
 int git_object_lookup_prefix(
 	git_object **object_out,
 	git_repository *repo,
