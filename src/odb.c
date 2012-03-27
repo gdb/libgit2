@@ -88,20 +88,6 @@ static void free_odb_object(void *o)
 	}
 }
 
-int git_odb__create_odb_object(
-	git_odb_object **odb_object_out,
-	git_oid *oid,
-	git_rawobj *contents
-	)
-{
-	/*
-	 * Don't think we need error checking here, because
-	 * new_odb_object doesn't do any.
-	 */
-	*odb_object_out = new_odb_object(oid, contents);
-	return GIT_SUCCESS;
-}
-
 const git_oid *git_odb_object_id(git_odb_object *object)
 {
 	return &object->cached.oid;
